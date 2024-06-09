@@ -132,7 +132,7 @@ def select_occipital_electrodes(electrodes):
 
     return occipital_electrodes, occipital_indexes, occipital_names
 
-## -------------------------------------- INITAL ANALYSIS FUNCTIONS --------------------------------------------------------------------------
+## -------------------------------------- CCA SIGNAL GENERATION FUNCTIONS --------------------------------------------------------------------------
 
 PI = np.pi
 sin = lambda f, h, t, p: np.sin(2*PI*f*h*t + p) # Function for generating the sin element of the waves
@@ -178,31 +178,10 @@ def generate_ref_signal(f, sampling_rate, duration, num_harmonics, phase):
         ref_signal.append(generate_ref_signal_at_time(f, t, num_harmonics, phase))
     return ref_signal
 
-def max_cca(X, Y):
-    """
-    This function finds the maximum canonical correlation for data X and Y
-    
-    Parameters:
-    X (List[float]): X data
-    Y (List[float]): Y data
-
-    Returns:
-    [float]: maximum cannonical correlation
-    """
-    N = len(X) 
-
-    xx = 1/N * (X.T @ X)
-    yy = 1/N * (Y.T @ Y)
-    xy = 1/N * (X.T @ Y)
-    yx = 1/N * (Y.T @ X)
-    xx_inv = np.linalg.pinv(xx)
-    yy_inv = np.linalg.pinv(yy)
-    eig_values, eig_vectors = scipy.linalg.eig(yy_inv @ yx @ xx_inv @ xy)
-    return max(np.sqrt(eig_values))
 
 ## -------------------------------------- SEQUENTIAL ANALYSIS FUNCTIONS ----------------------------------------------------------------------
 
-def plot_generation_three(eeg_data, sampling_rate, freq_idx, stimulus_frequencies, show_plot, save_plot, path, shading_size, shading_sample):
+def plot_generation_spectrogram_wavelet(eeg_data, sampling_rate, freq_idx, stimulus_frequencies, show_plot, save_plot, path, shading_size, shading_sample):
 
     """ 
     This function generates a plot with three panels on on top of each other. The first panel contains the filtered signal, the second panel contains the spectrogram and the third panel contains the visual representation of the wavelet transform coefficients.
@@ -304,8 +283,6 @@ def plot_generation_three(eeg_data, sampling_rate, freq_idx, stimulus_frequencie
         plt.show()
     else: 
         plt.close()
-
-    
 
     
 
