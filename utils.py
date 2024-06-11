@@ -3,6 +3,55 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pywt
 import scipy.signal as signal
+import matplotlib.patches as mpatches
+import h5py
+
+## -------------------------------------- Data storing and loading functions --------------------------------------------------------------------------
+
+def store_data(file_name, data):
+    """
+    This function stores the data from an array into an h5 file.
+    
+    Parameters:
+    file_name (str): name of the file the data will be stored into
+    data (List[float]): array of data to store (can be multidimensional)
+    """
+    if file_name.endswith('.h5'):
+
+        with h5py.File(file_name, "w") as file:
+            file.create_dataset("data", data=data)
+
+        print("Data stored succesfully in", file_name)
+
+    else:
+        print("File name must have extension .h5")
+
+
+def load_data(file_name):
+    """
+    This function loads the data from a .h5 file into an array.
+
+    Parameters:
+    file_name (str): name of the file the data will be loaded from
+    """
+
+    if file_name.endswith('.h5'):
+
+        # Open the HDF5 file in read mode
+        with h5py.File(file_name, "r") as file:
+            # Load the dataset
+            loaded_data = file["data"][:]
+
+        print("Data loaded successfully from", file_name)
+
+        return loaded_data
+    
+    else:
+        print("File name must have extension .h5")
+        return []
+    
+
+
 
 ## -------------------------------------- Pandas formatting functions --------------------------------------------------------------------------
 def color_numbers_true_false(val):
@@ -181,7 +230,7 @@ def generate_ref_signal(f, sampling_rate, duration, num_harmonics, phase):
 
 ## -------------------------------------- SEQUENTIAL ANALYSIS FUNCTIONS ----------------------------------------------------------------------
 
-def plot_generation_spectrogram_wavelet(eeg_data, sampling_rate, freq_idx, stimulus_frequencies, show_plot, save_plot, path, shading_size, shading_sample):
+def plot_generation_spectrogram_wavelet(eeg_data, sampling_rate, freq_idx, stimulus_frequencies, show_plot, save_plot, path, shading_samples, shading_size):
 
     """ 
     This function generates a plot with three panels on on top of each other. The first panel contains the filtered signal, the second panel contains the spectrogram and the third panel contains the visual representation of the wavelet transform coefficients.
@@ -194,6 +243,8 @@ def plot_generation_spectrogram_wavelet(eeg_data, sampling_rate, freq_idx, stimu
     show_plot (boolean): indicates wether or not to show the plot
     save_plot (boolean): indicates whether or not to save the file as a png
     path (str): path of the saved png file
+    shading_samples (List[int]): first shaded sample indexes for both our methods. If the shading sample is -1 that method failed and there will be no shaded area for it.
+    shading_size (int): number of samples to shade
     """
 
     wavelet_name = "morl" # Morlet
@@ -229,16 +280,26 @@ def plot_generation_spectrogram_wavelet(eeg_data, sampling_rate, freq_idx, stimu
     ax1.set_ylabel("Amplitude V")
     ax1.set_xlabel("Time (s)")
 
-    if shading_sample != -1:
+    colors = ["lightblue", "lightyellow"]
+    methods = ["m_PSDA", "CCA"]
 
-        section_start = shading_sample/sampling_rate
-        section_end = (shading_sample + shading_size)/sampling_rate
+    # Create proxy artists for legend
+    legend_patches = [mpatches.Patch(color=color, label=method) for color, method in zip(colors, methods)]
 
-        print(section_start, section_end)
-        color = 'lightblue'
-        ax1.axvspan(section_start, section_end, facecolor=color, alpha=0.5)
+    # Add legend
+    ax1.legend(handles=legend_patches, loc="upper right")
 
+    for index, start in enumerate(shading_samples):
 
+        if start != -1:
+
+            section_start = start/sampling_rate
+            section_end = (start + shading_size)/sampling_rate
+
+            color = colors[index]
+            ax1.axvspan(section_start, section_end, facecolor=color, alpha=0.75)
+
+            #ax1.text(section_start + 0.1, 14 - 2*index, methods[index], fontsize=8, color='k')
 
 
     # Valore utilizados para mantener la escala de colores del espectrograma
@@ -330,3 +391,64 @@ def plot_generation_fft(eeg_data, sampling_rate, frequency, show_plot, save_plot
         plt.show()
     else:
         plt.close()
+
+        
+
+def highest_magntiudes(data, frequency, sampling_rate, path):
+    
+    """
+    This function generates a plot showing which frequencies had the highest wavelet transform magnitudes over time filtering out the magnitudes below 25 for easier visual interpretation. The stimulus frequency is marked with a red line.
+    Parameters:
+    data (List[float]): EEG recording under study
+    frequency (float): the stimulus frequency 
+    sampling_rate (int): sampling rate
+    path (string): path to save the generated plot
+    """
+
+    low_freq = 5
+    high_freq = 40
+    sampling_rate = 250
+
+    b, a = signal.butter(4, [low_freq, high_freq], fs=sampling_rate, btype='band')
+    filtered_data = signal.lfilter(b, a, data) 
+
+
+    freqs = np.arange(1, 40, 0.01) /sampling_rate 
+    wavelet_name = "morl"
+    # Pasamos de frecuencias a escalas para utilizarlas en la transformada
+    scales = pywt.frequency2scale(wavelet_name, freqs) 
+    # Transformada Wavelet
+    cwtmatr, freqs = pywt.cwt(filtered_data, scales, wavelet_name)
+
+    # Filter out magnitudes below 20
+    cwtmatr_filtered = np.where(cwtmatr < 25, 0, cwtmatr)
+
+    # Find the index of the maximum magnitude along the frequency axis for each time step
+    max_freq_indices = np.argmax(cwtmatr_filtered, axis=0)
+
+    # Extract the corresponding frequencies for each time step
+    frequencies = np.arange(1, 40, step=0.01)
+    max_freq_values = frequencies[max_freq_indices]
+
+    t = np.arange(0, cwtmatr.shape[1]/250, 1/250)
+
+    # Plot the time vs. the frequency with the highest magnitude
+    plt.plot(t, max_freq_values, label='Frequency with Highest Magnitude (>25)')
+    plt.axhline(frequency, color="red", label="Stimulus frequency")
+    plt.xlabel('Time (s)')
+    plt.ylabel('Frequency (Hz)')
+    plt.title('Highest magnitudes over time')
+    plt.legend()
+    plt.yticks(np.arange(1, 30, step=2))
+    if cwtmatr.shape[1] > 800:
+        plt.xlim(0, 4)
+    else:
+        plt.xlim(0, 3)
+
+    if path != "":
+        plt.savefig(path, dpi='figure', format=None)
+        
+    else:    
+        plt.show()
+    
+    plt.close()
